@@ -1,10 +1,12 @@
 # change parasite drag depending on configuration, ldg gear position
 # make RWR
 # fix altitude
+# MAKE SURE that all calculations involving relative area based on AoA, use Arel and not wingarea (yeah just go through all the math ffs)
 
 import pygame
 import math
 from _3DEngine import Engine
+from PhysEngine import Physics
 
 pygame.init()
 screen = pygame.display.set_mode((128, 128))
@@ -18,7 +20,7 @@ warnings = []
 framecounter = 0
 blinkstate = 0
 hdg = 45
-spd = 563
+spd = 0
 pitch = 0
 roll = 0
 gs = 0
@@ -42,8 +44,8 @@ abtoggle = 0
 velocity = 0
 temperature = 288.15
 engine = Engine(screen, 128, 128)
+physics = Physics()
 engine.makeTerrain([20,20],[0,0],2)
-isbetty = 0
 
 # Constants for the HUD
 SQUARE_START_X, SQUARE_START_Y = 37, 37
@@ -58,9 +60,7 @@ INSIDE, LEFT, RIGHT, BOTTOM, TOP = 0, 1, 2, 4, 8
 # Example F-22 Raptor, clean config
 abmaxthrust = 312000
 maxthrust = 232000
-minweight = 193191
-fuelliters = 8200
-fuelweight = (fuelliters * 9.81)
+minweight = 193191 + 80442
 weight = 0
 wingarea = 78.04
 wingspan = 13.56
@@ -75,6 +75,9 @@ liftcoef0 = 0.15
 parasitedrag =  0.0348
 someclfactor = 0.09
 baselineclmax = 1.2
+
+# And all of that converted to a list for the Physics engine
+raptor = [maxthrust, abmaxthrust, minweight, weight, wingarea, wingspan, oswaldefficiency, wingangle, thickchordratio, liftcoef0, parasitedrag, baselineclmax]
 
 # Artificial horizon
 def rotate_point(px, py, ox, oy, angle):
@@ -313,44 +316,30 @@ while running:
             if event.key == pygame.K_c:
                 mode = (mode + 1) % 3
 
-    # Math
-    soundspd = math.sqrt(1.4 * 287.05 * temperature)
-    machspeed = velocity / soundspd
-    totalweight = minweight + weight + fuelweight
-    temperature = 288.15 - 0.0065 * alt
-    airpressure = 101325 * ((1 - (0.00976 * alt / 288.15)) ** ((9.81 * 0.02896968) / (8.314462618 * 0.00976)))
-    airdensity = (airpressure * 0.0289644) / (8.31447 * temperature)
-    liftcoef = liftcoef0 + liftslope * math.radians(aoa)
-    lift = 0.5 * airdensity * (velocity ** 2) * liftcoef * wingarea
-    induceddrag = (liftcoef ** 2) / (math.pi * aspectratio * oswaldefficiency)
-    dragcoef = parasitedrag + induceddrag
-    drag = 0.5 * airdensity * (velocity ** 2) * dragcoef * wingarea
-    if abtoggle == 0:
-        netforcefwd = maxthrust * (throttle / 100) - drag
-        twr = maxthrust*(throttle/100) / totalweight
-    elif abtoggle == 1:
-        netforcefwd = abmaxthrust - drag
-        twr = abmaxthrust / totalweight
-    acceleration = netforcefwd/(totalweight / 9.81)
-    clmax = baselineclmax + (thickchordratio/0.1)
-    stallspd = math.sqrt((totalweight * 2) / (airdensity * wingarea * clmax))
-
     # Conversion
     spd = velocity * 1.944
-    alt = -y * 3.281
+    alt = y * 3.281
 
     # Input
     keys = pygame.key.get_pressed()
     if keys[pygame.K_LEFT]:
+        ailerondeflection = 40
         roll += rollrate / 60
-    if keys[pygame.K_RIGHT]:
+    elif keys[pygame.K_RIGHT]:
+        ailerondeflection = -40
         roll -= rollrate / 60
+    else:
+        ailerondeflection = 0
     if keys[pygame.K_UP]:
+        elevatordeflection = -45
         pitch = adjust_pitch_heading(pitch, hdg, roll, -(rollrate/60))[0]
         hdg = adjust_pitch_heading(pitch, hdg, roll, rollrate/60)[1]
-    if keys[pygame.K_DOWN]:
+    elif keys[pygame.K_DOWN]:
+        elevatordeflection = 45
         pitch = adjust_pitch_heading(pitch, hdg, roll, rollrate/60)[0]
         hdg = adjust_pitch_heading(pitch, hdg, roll, -(rollrate/60))[1]
+    else:
+        elevatordeflection = 0
     if keys[pygame.K_z]:
         aoa -= 1
     if keys[pygame.K_x]:
@@ -387,6 +376,10 @@ while running:
     # Output
     velocity += acceleration / 60
 
+    # Functions
+    physicsvars = [y, aoa, velocity, throttle, elevatordeflection, ailerondeflection]
+    physics.update_vars(physicsvars)
+    physics.update_physics()
 
     # Drawing
     screen.fill(black)
@@ -433,6 +426,6 @@ while running:
     pygame.display.flip()
     pygame.time.Clock().tick(60)
     framecounter += 1
-    print(lift)
+    print(physics.update_physics(1/60))
 
 pygame.quit()
