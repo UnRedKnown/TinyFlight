@@ -1,5 +1,5 @@
 import math
-# raptor = [maxthrust, abmaxthrust, minweight, weight, wingarea, wingspan, oswaldefficiency, wingangle, thickchordratio, liftcoef0, parasitedrag, baselineclmax]
+# raptor = [maxthrust, abmaxthrust, minweight, weight, wingarea, wingspan, oswaldefficiency, wingangle, thickchordratio, liftcoef0, parasitedrag, baselineclmax, chordlength]
 class Physics:
     def __init__(self, aircraft_params):
         # Initialize aircraft constants and parameters
@@ -15,6 +15,7 @@ class Physics:
         self.liftcoef0 = aircraft_params[9]
         self.parasitedrag = aircraft_params[10]
         self.baselineclmax = aircraft_params[11]
+        self.chordlength = aircraft_params[12]
 
         self.aspectratio = (self.wingspan ** 2) / self.wingarea
         self.liftslope = (2 * math.pi * self.aspectratio) / (2 + math.sqrt(4 + (self.aspectratio**2) * (1 + (math.tan(math.radians(self.wingangle))**2))))
@@ -29,6 +30,7 @@ class Physics:
         self.velocity = 0
         self.throttle = 0
         self.abtoggle = 0
+        self.pitchmomentcoef = 1
 
     def update_vars(self, variables):
         self.y, self.aoa, self.velocity, self.throttle, self.elevatordeflection, self.ailerondeflection = variables
@@ -52,8 +54,10 @@ class Physics:
         self.acceleration = netforcefwd / (self.totalweight / 9.81)
         clmax = self.baselineclmax + (self.thickchordratio/0.1)
         self.stallspd = math.sqrt((self.totalweight * 2) / (airdensity * self.wingarea * clmax))
+        dynamicpressure = 0.5*1.225*(self.velocity**2)
 
-        pitchmoment = 0.5*airdensity*(self.velocity ** 2)*self.wingarea*
+        pitchmoment = 0.5*airdensity*(self.velocity ** 2)*self.wingarea*self.pitchmomentcoef
+        self.pitchmomentcoef = pitchmoment/(dynamicpressure*self.wingarea*self.chordlength)
     def update_physics(self, delta_time):
         self.update_data()
 
